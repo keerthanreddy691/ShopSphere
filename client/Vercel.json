@@ -1,8 +1,9 @@
+
 {
-"rewrites": [
-{
-"source": "/api/*",
-"destination": "https://shopspherebackend-4sd8.onrender.com/api/*"
-}
-]
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://shopspherebackend-4sd8.onrender.com/api/:path*"
+    }
+  ]
 }
