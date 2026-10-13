@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-tap-highlight-color: transparent; }
+  body { @apply bg-slate-50 text-ink antialiased; font-feature-settings: 'cv11', 'ss01'; }
+  h1, h2, h3, h4 { @apply font-display tracking-tight text-ink; }
+  :focus-visible { @apply outline-none ring-2 ring-brand-500 ring-offset-2; }
+}
+
+@layer components {
+  .card { @apply rounded-2xl border border-slate-200/80 bg-white shadow-card; }
+  .label { @apply mb-1.5 block text-sm font-medium text-ink-soft; }
+  .field-error { @apply mt-1 text-xs font-medium text-red-600; }
+  .scrollbar-none { scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+}
