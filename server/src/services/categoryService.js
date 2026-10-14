@@ -6,37 +6,67 @@ import { uniqueSlug } from '../utils/slugify.js';
 import { categories as defaultCategories } from '../seed/data.js';
 
 export async function list({ includeInactive = false } = {}) {
-  const filter = includeInactive ? {} : { isActive: true };
+  let filter = includeInactive ? {} : { isActive: true };
 
-  const [categories, counts] = await Promise.all([
-    Category.find(filter).sort({ name: 1 }).lean(),
-    Product.aggregate([
-      { $match: { moderationStatus: 'APPROVED', status: 'ACTIVE' } },
-      { $group: { _id: '$category', count: { $sum: 1 } } },
-    ]),
+  let categories = await Category.find(filter)
+    .sort({ name: 1 })
+    .lean();
+
+  // Create real MongoDB categories if no active categories exist.
+  // Never return fake IDs such as "default-1".
+  if (categories.length === 0 && !includeInactive) {
+    for (const item of defaultCategories) {
+      const slug = item.name
+        .toLowerCase()
+        .replace(/&/g, 'and')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+
+      await Category.updateOne(
+        { slug },
+        {
+          $setOnInsert: {
+            ...item,
+            name: item.name,
+            slug,
+            isActive: true,
+          },
+        },
+        { upsert: true }
+      );
+    }
+
+    categories = await Category.find({ isActive: true })
+      .sort({ name: 1 })
+      .lean();
+  }
+
+  const counts = await Product.aggregate([
+    {
+      $match: {
+        moderationStatus: 'APPROVED',
+        status: 'ACTIVE',
+      },
+    },
+    {
+      $group: {
+        _id: '$category',
+        count: { $sum: 1 },
+      },
+    },
   ]);
 
   const productCountMap = new Map(
-    counts.map((item) => [String(item._id), item.count])
+    counts.map((item) => [
+      String(item._id),
+      item.count,
+    ])
   );
 
-  if (categories.length > 0) {
-    return categories.map((category) => ({
-      ...category,
-      productCount: productCountMap.get(String(category._id)) || 0,
-    }));
-  }
-
-  return defaultCategories.map((category, index) => ({
+  return categories.map((category) => ({
     ...category,
-    _id: `default-${index + 1}`,
-    slug: category.name
-      .toLowerCase()
-      .replace(/&/g, 'and')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, ''),
-    isActive: true,
-    productCount: 0,
+    productCount:
+      productCountMap.get(String(category._id)) || 0,
   }));
 }
 
@@ -55,7 +85,11 @@ export async function getBySlug(slug) {
 
 export async function create(data) {
   const slug = await uniqueSlug(Category, data.name);
-  return Category.create({ ...data, slug });
+
+  return Category.create({
+    ...data,
+    slug,
+  });
 }
 
 export async function update(id, data) {
@@ -66,10 +100,15 @@ export async function update(id, data) {
   }
 
   if (data.name && data.name !== category.name) {
-    category.slug = await uniqueSlug(Category, data.name, id);
+    category.slug = await uniqueSlug(
+      Category,
+      data.name,
+      id
+    );
   }
 
   Object.assign(category, data);
+
   await category.save();
 
   return category;
@@ -82,7 +121,9 @@ export async function remove(id) {
     throw ApiError.notFound('Category not found');
   }
 
-  const inUse = await Product.countDocuments({ category: id });
+  const inUse = await Product.countDocuments({
+    category: id,
+  });
 
   if (inUse) {
     throw ApiError.conflict(
@@ -91,5 +132,6 @@ export async function remove(id) {
   }
 
   await category.deleteOne();
+
   return category;
 }
